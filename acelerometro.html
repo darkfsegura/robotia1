@@ -6,8 +6,9 @@
 <title>Control por Inclinación</title>
 <style>
   /* ===================================================================
-     CONTROL POR INCLINACION: mueve el robot inclinando el celular.
-     Los niños pueden experimentar cambiando el UMBRAL y la VELOCIDAD.
+     CONTROL POR INCLINACION en forma de CRUZ.
+     Cada direccion es un CUADRO que se ILUMINA cuando se activa al
+     inclinar el celular. Cada cuadro tiene su velocidad independiente.
      =================================================================== */
   body {
     font-family: Arial, Helvetica, sans-serif;
@@ -18,7 +19,7 @@
     padding: 16px;
     user-select: none;
   }
-  h1 { font-size: 22px; margin: 8px 0 16px; }
+  h1 { font-size: 22px; margin: 8px 0 12px; }
 
   #estado {
     background: #334155;
@@ -31,8 +32,8 @@
   .btn {
     border: none;
     border-radius: 12px;
-    padding: 14px 24px;
-    font-size: 18px;
+    padding: 13px 24px;
+    font-size: 17px;
     color: white;
     cursor: pointer;
     margin-bottom: 12px;
@@ -41,38 +42,71 @@
   }
   .btn-conectar { background: #22c55e; }
   .btn-conectar:active { background: #16a34a; }
-
-  /* Boton de activar control: cambia de color segun este activo o no */
-  .btn-activar     { background: #f59e0b; }
+  .btn-activar  { background: #f59e0b; }
   .btn-activar:active { background: #d97706; }
-  .btn-activar.activo { background: #ef4444; }   /* rojo cuando esta activo */
+  .btn-activar.activo { background: #ef4444; }
 
-  .panel {
-    background: #334155;
-    border-radius: 12px;
-    padding: 14px;
-    margin: 0 auto 12px;
+  /* La cruz: 3 columnas x 3 filas */
+  .cruz {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, auto);
+    gap: 10px;
     max-width: 360px;
+    margin: 0 auto;
   }
+  .celda { display: flex; flex-direction: column; }
 
-  .fila-vel { display: flex; align-items: center; gap: 10px; }
-  .fila-vel input { flex: 1; }
-  #numVel { font-size: 20px; font-weight: bold; color: #fbbf24; width: 40px; }
-
-  /* Indicador grande de la direccion actual */
-  #direccion {
-    font-size: 40px;
+  /* CUADRO indicador de direccion (NO es un boton; se ilumina solo) */
+  .cuadro {
+    border-radius: 12px;
+    padding: 18px 0;
+    font-size: 17px;
     font-weight: bold;
-    margin: 14px 0;
-    min-height: 50px;
+    color: #94a3b8;
+    background: #334155;          /* apagado: gris */
+    border: 2px solid #475569;
+    transition: all 0.1s;
+  }
+  /* Cuando la direccion esta ACTIVA, el cuadro se ilumina en azul */
+  .cuadro.activo {
+    background: #3b82f6;
+    color: white;
+    border-color: #93c5fd;
+    box-shadow: 0 0 14px #3b82f6;
   }
 
-  /* Muestra los angulos de inclinacion (util para aprender/depurar) */
-  #angulos {
-    color: #94a3b8;
-    font-size: 13px;
-    margin-bottom: 12px;
+  .mini-vel {
+    margin-top: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
   }
+  .mini-vel input { flex: 1; min-width: 0; }
+  .mini-vel .num { color: #fbbf24; font-weight: bold; width: 30px; font-size: 13px; }
+
+  .vacio { visibility: hidden; }
+
+  /* Cuadro central STOP: se ilumina (rojo) cuando el robot esta detenido */
+  .cuadro-stop {
+    border-radius: 12px;
+    background: #334155;
+    border: 2px solid #475569;
+    color: #94a3b8;
+    font-size: 17px;
+    font-weight: bold;
+    align-self: stretch;
+    transition: all 0.1s;
+  }
+  .cuadro-stop.activo {
+    background: #ef4444;
+    color: white;
+    border-color: #fca5a5;
+    box-shadow: 0 0 14px #ef4444;
+  }
+
+  #angulos { color: #94a3b8; font-size: 13px; margin: 14px 0 8px; min-height: 18px; }
 
   #respuesta {
     background: #334155;
@@ -83,7 +117,6 @@
     max-width: 360px;
     margin: 0 auto;
   }
-
   .volver { color: #94a3b8; font-size: 14px; display: inline-block; margin-top: 16px; }
 </style>
 </head>
@@ -93,26 +126,60 @@
 
   <div id="estado">Desconectado</div>
 
-  <!-- 1) Primero conectar al robot -->
   <button class="btn btn-conectar" id="btnConectar">Conectar al Robot</button>
-
-  <!-- 2) Luego activar el control por inclinacion -->
   <button class="btn btn-activar" id="btnActivar">Activar Control</button>
 
-  <!-- Velocidad del movimiento -->
-  <div class="panel">
-    <div class="fila-vel">
-      <span>Velocidad:</span>
-      <input type="range" id="sliderVel" min="0" max="255" value="150"
-             oninput="document.getElementById('numVel').textContent = this.value">
-      <span id="numVel">150</span>
+  <!-- CRUZ de indicadores -->
+  <div class="cruz">
+
+    <!-- Fila 1: [vacio] [ADELANTE] [vacio] -->
+    <div class="vacio"></div>
+    <div class="celda">
+      <div class="cuadro" id="cuadroAd">▲<br>Adelante</div>
+      <div class="mini-vel">
+        <input type="range" id="velAd" min="0" max="255" value="150"
+               oninput="document.getElementById('numAd').textContent=this.value">
+        <span class="num" id="numAd">150</span>
+      </div>
     </div>
+    <div class="vacio"></div>
+
+    <!-- Fila 2: [IZQUIERDA] [STOP] [DERECHA] -->
+    <div class="celda">
+      <div class="cuadro" id="cuadroGa">◀<br>Izquierda</div>
+      <div class="mini-vel">
+        <input type="range" id="velGa" min="0" max="255" value="150"
+               oninput="document.getElementById('numGa').textContent=this.value">
+        <span class="num" id="numGa">150</span>
+      </div>
+    </div>
+
+    <div class="cuadro-stop activo" id="cuadroStop">■<br>STOP</div>
+
+    <div class="celda">
+      <div class="cuadro" id="cuadroGh">▶<br>Derecha</div>
+      <div class="mini-vel">
+        <input type="range" id="velGh" min="0" max="255" value="150"
+               oninput="document.getElementById('numGh').textContent=this.value">
+        <span class="num" id="numGh">150</span>
+      </div>
+    </div>
+
+    <!-- Fila 3: [vacio] [ATRAS] [vacio] -->
+    <div class="vacio"></div>
+    <div class="celda">
+      <div class="cuadro" id="cuadroAt">▼<br>Atras</div>
+      <div class="mini-vel">
+        <input type="range" id="velAt" min="0" max="255" value="150"
+               oninput="document.getElementById('numAt').textContent=this.value">
+        <span class="num" id="numAt">150</span>
+      </div>
+    </div>
+    <div class="vacio"></div>
+
   </div>
 
-  <!-- Muestra hacia donde se esta moviendo el robot -->
-  <div id="direccion">⏸️</div>
-  <div id="angulos">Inclina el celular para mover el robot</div>
-
+  <div id="angulos">Activa el control e inclina el celular</div>
   <div id="respuesta">Respuestas del robot apareceran aqui...</div>
 
   <br>
@@ -120,35 +187,36 @@
 
 <script>
 /* =====================================================================
-   LOGICA del control por inclinacion.
+   LOGICA del control por inclinacion con cuadros que se iluminan.
    ===================================================================== */
-
-// "Direcciones" del robot (deben coincidir con la ESP32: FFE0 / FFE1).
 const SERVICE_UUID = 0xFFE0;
 const CHAR_UUID    = 0xFFE1;
 
 let caracteristica = null;
-let controlActivo  = false;   // ¿esta activado el control por inclinacion?
+let controlActivo  = false;
 
 // ----------------------------------------------------------------------
-// AJUSTES QUE LOS NIÑOS PUEDEN CAMBIAR PARA EXPERIMENTAR:
-// ----------------------------------------------------------------------
-const UMBRAL = 15;            // Cuanto hay que inclinar (en grados) para
-                              // que el robot reaccione. Mas alto = hay que
-                              // inclinar mas. Mas bajo = mas sensible.
-const ENVIO_CADA_MS = 200;    // Cada cuanto se envia un comando (milisegundos).
-                              // No bajar mucho para no saturar el Bluetooth.
+// AJUSTES QUE LOS NIÑOS PUEDEN CAMBIAR:
+const UMBRAL = 15;            // Grados de inclinacion para que reaccione.
+const ENVIO_CADA_MS = 200;    // Cada cuanto se envia un comando (ms).
 // ----------------------------------------------------------------------
 
 const estado    = document.getElementById('estado');
 const respuesta = document.getElementById('respuesta');
-const slider    = document.getElementById('sliderVel');
-const dirTexto  = document.getElementById('direccion');
 const angTexto  = document.getElementById('angulos');
 const btnActivar= document.getElementById('btnActivar');
 
-let ultimoComando = '';        // Para no repetir el mismo comando sin parar
-let ultimoEnvio   = 0;         // Momento del ultimo envio (para limitar frecuencia)
+// Cuadros indicadores y sus sliders, agrupados por direccion.
+const DIRS = {
+  ad:   { cuadro: document.getElementById('cuadroAd'), slider: document.getElementById('velAd') },
+  at:   { cuadro: document.getElementById('cuadroAt'), slider: document.getElementById('velAt') },
+  ga:   { cuadro: document.getElementById('cuadroGa'), slider: document.getElementById('velGa') },
+  gh:   { cuadro: document.getElementById('cuadroGh'), slider: document.getElementById('velGh') }
+};
+const cuadroStop = document.getElementById('cuadroStop');
+
+let ultimoComando = '';
+let ultimoEnvio   = 0;
 
 // --- CONECTAR AL ROBOT ---
 document.getElementById('btnConectar').addEventListener('click', async () => {
@@ -158,53 +226,38 @@ document.getElementById('btnConectar').addEventListener('click', async () => {
       filters: [{ namePrefix: 'ROBOT' }],
       optionalServices: [SERVICE_UUID]
     });
-
     dispositivo.addEventListener('gattserverdisconnected', () => {
       estado.textContent = 'Desconectado';
       caracteristica = null;
       desactivarControl();
     });
-
     estado.textContent = 'Conectando...';
     const servidor = await dispositivo.gatt.connect();
     const servicio = await servidor.getPrimaryService(SERVICE_UUID);
     caracteristica = await servicio.getCharacteristic(CHAR_UUID);
-
     await caracteristica.startNotifications();
     caracteristica.addEventListener('characteristicvaluechanged', (evento) => {
-      const texto = new TextDecoder().decode(evento.target.value);
-      respuesta.textContent = '🤖 ' + texto;
+      respuesta.textContent = '🤖 ' + new TextDecoder().decode(evento.target.value);
     });
-
     estado.textContent = '✅ Conectado a ' + dispositivo.name;
   } catch (error) {
     estado.textContent = 'Error: ' + error.message;
   }
 });
 
-// --- ACTIVAR / DESACTIVAR el control por inclinacion ---
+// --- ACTIVAR / DESACTIVAR control por inclinacion ---
 btnActivar.addEventListener('click', async () => {
-  if (!caracteristica) {
-    estado.textContent = '⚠️ Primero conecta al robot';
-    return;
-  }
+  if (!caracteristica) { estado.textContent = '⚠️ Primero conecta al robot'; return; }
 
   if (!controlActivo) {
-    // Pedir permiso del sensor (necesario en iPhone y algunos Android).
+    // Permiso del sensor (iPhone y algunos Android).
     if (typeof DeviceOrientationEvent !== 'undefined' &&
         typeof DeviceOrientationEvent.requestPermission === 'function') {
       try {
         const permiso = await DeviceOrientationEvent.requestPermission();
-        if (permiso !== 'granted') {
-          estado.textContent = '⚠️ Permiso de sensor denegado';
-          return;
-        }
-      } catch (e) {
-        estado.textContent = 'Error de permiso: ' + e.message;
-        return;
-      }
+        if (permiso !== 'granted') { estado.textContent = '⚠️ Permiso de sensor denegado'; return; }
+      } catch (e) { estado.textContent = 'Error de permiso: ' + e.message; return; }
     }
-    // Activar
     controlActivo = true;
     btnActivar.textContent = 'Desactivar Control';
     btnActivar.classList.add('activo');
@@ -214,74 +267,70 @@ btnActivar.addEventListener('click', async () => {
   }
 });
 
-// Apaga el control y detiene el robot.
 function desactivarControl() {
   controlActivo = false;
   btnActivar.textContent = 'Activar Control';
   btnActivar.classList.remove('activo');
   window.removeEventListener('deviceorientation', manejarInclinacion);
-  dirTexto.textContent = '⏸️';
-  enviarComando('stop');   // seguridad: al desactivar, el robot para
+  iluminar('stop');
+  enviarComando('stop');
 }
 
-// --- LEER LA INCLINACION Y DECIDIR EL MOVIMIENTO ---
+// Apaga todos los cuadros y enciende solo el de la direccion indicada.
+function iluminar(direccion) {
+  for (const d in DIRS) DIRS[d].cuadro.classList.remove('activo');
+  cuadroStop.classList.remove('activo');
+  if (direccion === 'stop') cuadroStop.classList.add('activo');
+  else if (DIRS[direccion]) DIRS[direccion].cuadro.classList.add('activo');
+}
+
+// --- LEER INCLINACION Y DECIDIR DIRECCION ---
 function manejarInclinacion(evento) {
   if (!controlActivo) return;
+  const beta  = evento.beta  || 0;   // adelante/atras
+  const gamma = evento.gamma || 0;   // izquierda/derecha
 
-  // beta  = inclinacion adelante/atras.  gamma = inclinacion izq/der.
-  const beta  = evento.beta  || 0;
-  const gamma = evento.gamma || 0;
-
-  // Mostramos los angulos (para aprender como funciona el sensor).
   angTexto.textContent =
     'Adelante/Atras: ' + beta.toFixed(0) + '°   Izq/Der: ' + gamma.toFixed(0) + '°';
 
-  // Decidimos la direccion segun cual inclinacion sea mayor.
-  let comando = 'stop';
-  let icono = '⏸️';
-
+  let direccion = 'stop';
   if (Math.abs(beta) > Math.abs(gamma)) {
-    // Manda la inclinacion adelante/atras
-    if (beta > UMBRAL)       { comando = 'at'; icono = '🔽'; }  // inclinado hacia ti
-    else if (beta < -UMBRAL) { comando = 'ad'; icono = '🔼'; }  // inclinado lejos de ti
+    if (beta > UMBRAL)       direccion = 'at';
+    else if (beta < -UMBRAL) direccion = 'ad';
   } else {
-    // Manda la inclinacion izquierda/derecha
-    if (gamma > UMBRAL)       { comando = 'gh'; icono = '▶️'; }
-    else if (gamma < -UMBRAL) { comando = 'ga'; icono = '◀️'; }
+    if (gamma > UMBRAL)       direccion = 'gh';
+    else if (gamma < -UMBRAL) direccion = 'ga';
   }
 
-  dirTexto.textContent = icono;
+  iluminar(direccion);   // ilumina el cuadro correspondiente
 
-  // Enviamos el comando (limitando la frecuencia).
+  // Enviar comando limitando la frecuencia.
   const ahora = Date.now();
   if (ahora - ultimoEnvio >= ENVIO_CADA_MS) {
-    enviarComando(comando);
+    enviarComando(direccion);
     ultimoEnvio = ahora;
   }
 }
 
-// --- ENVIAR UN COMANDO AL ROBOT ---
-async function enviarComando(accion) {
+// --- ENVIAR UN COMANDO (cada direccion usa SU propia velocidad) ---
+async function enviarComando(direccion) {
   if (!caracteristica) return;
 
   let comando;
-  if (accion === 'stop') {
+  if (direccion === 'stop') {
     comando = 'stop';
   } else {
-    comando = accion + ' ' + slider.value;   // ej: "ad 150"
+    const velocidad = DIRS[direccion].slider.value;   // velocidad de ESA direccion
+    comando = direccion + ' ' + velocidad;
   }
 
-  // Evita reenviar el mismo comando una y otra vez sin necesidad,
-  // EXCEPTO stop, que conviene repetir para asegurar el frenado.
-  if (comando === ultimoComando && accion !== 'stop') return;
+  // No reenviar lo mismo repetido, salvo stop (conviene repetirlo).
+  if (comando === ultimoComando && direccion !== 'stop') return;
   ultimoComando = comando;
 
   try {
-    const datos = new TextEncoder().encode(comando);
-    await caracteristica.writeValue(datos);
-  } catch (error) {
-    // Silencioso: en movimiento continuo no queremos llenar la pantalla de errores.
-  }
+    await caracteristica.writeValue(new TextEncoder().encode(comando));
+  } catch (error) { /* silencioso durante movimiento continuo */ }
 }
 </script>
 
