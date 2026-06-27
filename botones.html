@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Control del Robot</title>
+<style>
+  /* ===================================================================
+     ESTILOS: aqui se define como SE VE la pagina (colores, tamaños).
+     Los niños pueden cambiar facilmente los colores de aqui.
+     =================================================================== */
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    background: #1e293b;
+    color: #f1f5f9;
+    text-align: center;
+    margin: 0;
+    padding: 16px;
+    user-select: none;
+  }
+  h1 { font-size: 22px; margin: 8px 0 16px; }
+
+  #estado {
+    background: #334155;
+    border-radius: 10px;
+    padding: 10px;
+    margin-bottom: 16px;
+    font-size: 15px;
+  }
+
+  .btn-conectar {
+    background: #22c55e;
+    color: white;
+    border: none;
+    border-radius: 12px;
+    padding: 14px 24px;
+    font-size: 18px;
+    margin-bottom: 16px;
+    cursor: pointer;
+  }
+  .btn-conectar:active { background: #16a34a; }
+
+  /* Cada control: un boton de direccion con SU PROPIO slider de velocidad */
+  .control {
+    background: #334155;
+    border-radius: 12px;
+    padding: 12px;
+    margin: 0 auto 12px;
+    max-width: 340px;
+  }
+  .control button {
+    border: none;
+    border-radius: 12px;
+    padding: 16px 0;
+    width: 100%;
+    font-size: 18px;
+    font-weight: bold;
+    color: white;
+    background: #3b82f6;
+    cursor: pointer;
+  }
+  .control button:active { background: #1d4ed8; }
+
+  /* Fila del slider de cada direccion */
+  .fila-vel {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 8px;
+  }
+  .fila-vel input { flex: 1; }
+  .fila-vel .num {
+    font-size: 18px;
+    font-weight: bold;
+    color: #fbbf24;
+    width: 38px;
+    text-align: right;
+  }
+
+  /* El boton STOP es rojo, grande y sin slider */
+  .btn-stop {
+    background: #ef4444;
+    color: white;
+    border: none;
+    border-radius: 12px;
+    padding: 20px 0;
+    width: 100%;
+    max-width: 340px;
+    font-size: 20px;
+    font-weight: bold;
+    margin: 0 auto 16px;
+    display: block;
+    cursor: pointer;
+  }
+  .btn-stop:active { background: #b91c1c; }
+
+  #respuesta {
+    margin-top: 8px;
+    background: #334155;
+    border-radius: 10px;
+    padding: 10px;
+    font-size: 14px;
+    min-height: 20px;
+  }
+</style>
+</head>
+<body>
+
+  <h1>🤖 Control del Robot</h1>
+
+  <div id="estado">Desconectado</div>
+
+  <button class="btn-conectar" id="btnConectar">Conectar al Robot</button>
+
+  <!-- ADELANTE: boton + su propio slider de velocidad -->
+  <div class="control">
+    <button onclick="enviarComando('ad', 'velAd')">▲ Adelante</button>
+    <div class="fila-vel">
+      <span>Vel:</span>
+      <input type="range" id="velAd" min="0" max="255" value="150" oninput="actualizarNum('velAd','numAd')">
+      <span class="num" id="numAd">150</span>
+    </div>
+  </div>
+
+  <!-- ATRAS -->
+  <div class="control">
+    <button onclick="enviarComando('at', 'velAt')">▼ Atras</button>
+    <div class="fila-vel">
+      <span>Vel:</span>
+      <input type="range" id="velAt" min="0" max="255" value="150" oninput="actualizarNum('velAt','numAt')">
+      <span class="num" id="numAt">150</span>
+    </div>
+  </div>
+
+  <!-- IZQUIERDA -->
+  <div class="control">
+    <button onclick="enviarComando('ga', 'velGa')">◀ Izquierda</button>
+    <div class="fila-vel">
+      <span>Vel:</span>
+      <input type="range" id="velGa" min="0" max="255" value="150" oninput="actualizarNum('velGa','numGa')">
+      <span class="num" id="numGa">150</span>
+    </div>
+  </div>
+
+  <!-- DERECHA -->
+  <div class="control">
+    <button onclick="enviarComando('gh', 'velGh')">▶ Derecha</button>
+    <div class="fila-vel">
+      <span>Vel:</span>
+      <input type="range" id="velGh" min="0" max="255" value="150" oninput="actualizarNum('velGh','numGh')">
+      <span class="num" id="numGh">150</span>
+    </div>
+  </div>
+
+  <!-- STOP: sin slider, detiene el robot -->
+  <button class="btn-stop" onclick="enviarComando('stop', null)">■ STOP</button>
+
+  <div id="respuesta">Respuestas del robot apareceran aqui...</div>
+
+<script>
+/* =====================================================================
+   LOGICA: el "cerebro" de la pagina. Maneja Bluetooth y los comandos.
+   ===================================================================== */
+
+// "Direcciones" del robot. Deben coincidir con las de la ESP32 (FFE0/FFE1).
+const SERVICE_UUID = 0xFFE0;
+const CHAR_UUID    = 0xFFE1;
+
+let caracteristica = null;
+
+const estado    = document.getElementById('estado');
+const respuesta = document.getElementById('respuesta');
+
+// Actualiza el numero que se muestra junto a cada slider.
+function actualizarNum(idSlider, idNumero) {
+  document.getElementById(idNumero).textContent =
+    document.getElementById(idSlider).value;
+}
+
+// --- CONECTAR AL ROBOT ---
+document.getElementById('btnConectar').addEventListener('click', async () => {
+  try {
+    estado.textContent = 'Buscando robot...';
+
+    // FILTRO INTERMEDIO: solo muestra dispositivos cuyo nombre empiece
+    // por "ROBOT". Asi no aparece el mar de dispositivos ajenos, pero
+    // tampoco dependemos de que el servicio venga en el advertising.
+    // 'optionalServices' da permiso para usar FFE0 tras conectar.
+    const dispositivo = await navigator.bluetooth.requestDevice({
+      filters: [{ namePrefix: 'ROBOT' }],
+      optionalServices: [SERVICE_UUID]
+    });
+
+    dispositivo.addEventListener('gattserverdisconnected', () => {
+      estado.textContent = 'Desconectado';
+      caracteristica = null;
+    });
+
+    estado.textContent = 'Conectando...';
+    const servidor = await dispositivo.gatt.connect();
+
+    const servicio = await servidor.getPrimaryService(SERVICE_UUID);
+    caracteristica = await servicio.getCharacteristic(CHAR_UUID);
+
+    // Nos suscribimos para recibir mensajes del robot.
+    await caracteristica.startNotifications();
+    caracteristica.addEventListener('characteristicvaluechanged', (evento) => {
+      const texto = new TextDecoder().decode(evento.target.value);
+      respuesta.textContent = '🤖 ' + texto;
+    });
+
+    estado.textContent = '✅ Conectado a ' + dispositivo.name;
+
+  } catch (error) {
+    estado.textContent = 'Error: ' + error.message;
+  }
+});
+
+// --- ENVIAR UN COMANDO ---
+// accion: 'ad','at','ga','gh','stop'.  idSlider: el slider de velocidad
+// de esa direccion (o null para stop).
+async function enviarComando(accion, idSlider) {
+  if (!caracteristica) {
+    estado.textContent = '⚠️ Primero conecta al robot';
+    return;
+  }
+
+  let comando;
+  if (accion === 'stop') {
+    comando = 'stop';                                   // stop no lleva numero
+  } else {
+    const velocidad = document.getElementById(idSlider).value;
+    comando = accion + ' ' + velocidad;                // ej: "ad 150"
+  }
+
+  try {
+    const datos = new TextEncoder().encode(comando);
+    await caracteristica.writeValue(datos);
+    respuesta.textContent = 'Enviado: ' + comando;
+  } catch (error) {
+    estado.textContent = 'Error al enviar: ' + error.message;
+  }
+}
+</script>
+
+</body>
+</html>
