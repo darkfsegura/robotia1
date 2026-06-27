@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Control por Inclinación</title>
+<style>
+  /* ===================================================================
+     CONTROL POR INCLINACION: mueve el robot inclinando el celular.
+     Los niños pueden experimentar cambiando el UMBRAL y la VELOCIDAD.
+     =================================================================== */
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    background: #1e293b;
+    color: #f1f5f9;
+    text-align: center;
+    margin: 0;
+    padding: 16px;
+    user-select: none;
+  }
+  h1 { font-size: 22px; margin: 8px 0 16px; }
+
+  #estado {
+    background: #334155;
+    border-radius: 10px;
+    padding: 10px;
+    margin-bottom: 12px;
+    font-size: 15px;
+  }
+
+  .btn {
+    border: none;
+    border-radius: 12px;
+    padding: 14px 24px;
+    font-size: 18px;
+    color: white;
+    cursor: pointer;
+    margin-bottom: 12px;
+    width: 100%;
+    max-width: 360px;
+  }
+  .btn-conectar { background: #22c55e; }
+  .btn-conectar:active { background: #16a34a; }
+
+  /* Boton de activar control: cambia de color segun este activo o no */
+  .btn-activar     { background: #f59e0b; }
+  .btn-activar:active { background: #d97706; }
+  .btn-activar.activo { background: #ef4444; }   /* rojo cuando esta activo */
+
+  .panel {
+    background: #334155;
+    border-radius: 12px;
+    padding: 14px;
+    margin: 0 auto 12px;
+    max-width: 360px;
+  }
+
+  .fila-vel { display: flex; align-items: center; gap: 10px; }
+  .fila-vel input { flex: 1; }
+  #numVel { font-size: 20px; font-weight: bold; color: #fbbf24; width: 40px; }
+
+  /* Indicador grande de la direccion actual */
+  #direccion {
+    font-size: 40px;
+    font-weight: bold;
+    margin: 14px 0;
+    min-height: 50px;
+  }
+
+  /* Muestra los angulos de inclinacion (util para aprender/depurar) */
+  #angulos {
+    color: #94a3b8;
+    font-size: 13px;
+    margin-bottom: 12px;
+  }
+
+  #respuesta {
+    background: #334155;
+    border-radius: 10px;
+    padding: 10px;
+    font-size: 14px;
+    min-height: 20px;
+    max-width: 360px;
+    margin: 0 auto;
+  }
+
+  .volver { color: #94a3b8; font-size: 14px; display: inline-block; margin-top: 16px; }
+</style>
+</head>
+<body>
+
+  <h1>📱 Control por Inclinación</h1>
+
+  <div id="estado">Desconectado</div>
+
+  <!-- 1) Primero conectar al robot -->
+  <button class="btn btn-conectar" id="btnConectar">Conectar al Robot</button>
+
+  <!-- 2) Luego activar el control por inclinacion -->
+  <button class="btn btn-activar" id="btnActivar">Activar Control</button>
+
+  <!-- Velocidad del movimiento -->
+  <div class="panel">
+    <div class="fila-vel">
+      <span>Velocidad:</span>
+      <input type="range" id="sliderVel" min="0" max="255" value="150"
+             oninput="document.getElementById('numVel').textContent = this.value">
+      <span id="numVel">150</span>
+    </div>
+  </div>
+
+  <!-- Muestra hacia donde se esta moviendo el robot -->
+  <div id="direccion">⏸️</div>
+  <div id="angulos">Inclina el celular para mover el robot</div>
+
+  <div id="respuesta">Respuestas del robot apareceran aqui...</div>
+
+  <br>
+  <a class="volver" href="index.html">← Volver al menú</a>
+
+<script>
+/* =====================================================================
+   LOGICA del control por inclinacion.
+   ===================================================================== */
+
+// "Direcciones" del robot (deben coincidir con la ESP32: FFE0 / FFE1).
+const SERVICE_UUID = 0xFFE0;
+const CHAR_UUID    = 0xFFE1;
+
+let caracteristica = null;
+let controlActivo  = false;   // ¿esta activado el control por inclinacion?
+
+// ----------------------------------------------------------------------
+// AJUSTES QUE LOS NIÑOS PUEDEN CAMBIAR PARA EXPERIMENTAR:
+// ----------------------------------------------------------------------
+const UMBRAL = 15;            // Cuanto hay que inclinar (en grados) para
+                              // que el robot reaccione. Mas alto = hay que
+                              // inclinar mas. Mas bajo = mas sensible.
+const ENVIO_CADA_MS = 200;    // Cada cuanto se envia un comando (milisegundos).
+                              // No bajar mucho para no saturar el Bluetooth.
+// ----------------------------------------------------------------------
+
+const estado    = document.getElementById('estado');
+const respuesta = document.getElementById('respuesta');
+const slider    = document.getElementById('sliderVel');
+const dirTexto  = document.getElementById('direccion');
+const angTexto  = document.getElementById('angulos');
+const btnActivar= document.getElementById('btnActivar');
+
+let ultimoComando = '';        // Para no repetir el mismo comando sin parar
+let ultimoEnvio   = 0;         // Momento del ultimo envio (para limitar frecuencia)
+
+// --- CONECTAR AL ROBOT ---
+document.getElementById('btnConectar').addEventListener('click', async () => {
+  try {
+    estado.textContent = 'Buscando robot...';
+    const dispositivo = await navigator.bluetooth.requestDevice({
+      filters: [{ namePrefix: 'ROBOT' }],
+      optionalServices: [SERVICE_UUID]
+    });
+
+    dispositivo.addEventListener('gattserverdisconnected', () => {
+      estado.textContent = 'Desconectado';
+      caracteristica = null;
+      desactivarControl();
+    });
+
+    estado.textContent = 'Conectando...';
+    const servidor = await dispositivo.gatt.connect();
+    const servicio = await servidor.getPrimaryService(SERVICE_UUID);
+    caracteristica = await servicio.getCharacteristic(CHAR_UUID);
+
+    await caracteristica.startNotifications();
+    caracteristica.addEventListener('characteristicvaluechanged', (evento) => {
+      const texto = new TextDecoder().decode(evento.target.value);
+      respuesta.textContent = '🤖 ' + texto;
+    });
+
+    estado.textContent = '✅ Conectado a ' + dispositivo.name;
+  } catch (error) {
+    estado.textContent = 'Error: ' + error.message;
+  }
+});
+
+// --- ACTIVAR / DESACTIVAR el control por inclinacion ---
+btnActivar.addEventListener('click', async () => {
+  if (!caracteristica) {
+    estado.textContent = '⚠️ Primero conecta al robot';
+    return;
+  }
+
+  if (!controlActivo) {
+    // Pedir permiso del sensor (necesario en iPhone y algunos Android).
+    if (typeof DeviceOrientationEvent !== 'undefined' &&
+        typeof DeviceOrientationEvent.requestPermission === 'function') {
+      try {
+        const permiso = await DeviceOrientationEvent.requestPermission();
+        if (permiso !== 'granted') {
+          estado.textContent = '⚠️ Permiso de sensor denegado';
+          return;
+        }
+      } catch (e) {
+        estado.textContent = 'Error de permiso: ' + e.message;
+        return;
+      }
+    }
+    // Activar
+    controlActivo = true;
+    btnActivar.textContent = 'Desactivar Control';
+    btnActivar.classList.add('activo');
+    window.addEventListener('deviceorientation', manejarInclinacion);
+  } else {
+    desactivarControl();
+  }
+});
+
+// Apaga el control y detiene el robot.
+function desactivarControl() {
+  controlActivo = false;
+  btnActivar.textContent = 'Activar Control';
+  btnActivar.classList.remove('activo');
+  window.removeEventListener('deviceorientation', manejarInclinacion);
+  dirTexto.textContent = '⏸️';
+  enviarComando('stop');   // seguridad: al desactivar, el robot para
+}
+
+// --- LEER LA INCLINACION Y DECIDIR EL MOVIMIENTO ---
+function manejarInclinacion(evento) {
+  if (!controlActivo) return;
+
+  // beta  = inclinacion adelante/atras.  gamma = inclinacion izq/der.
+  const beta  = evento.beta  || 0;
+  const gamma = evento.gamma || 0;
+
+  // Mostramos los angulos (para aprender como funciona el sensor).
+  angTexto.textContent =
+    'Adelante/Atras: ' + beta.toFixed(0) + '°   Izq/Der: ' + gamma.toFixed(0) + '°';
+
+  // Decidimos la direccion segun cual inclinacion sea mayor.
+  let comando = 'stop';
+  let icono = '⏸️';
+
+  if (Math.abs(beta) > Math.abs(gamma)) {
+    // Manda la inclinacion adelante/atras
+    if (beta > UMBRAL)       { comando = 'at'; icono = '🔽'; }  // inclinado hacia ti
+    else if (beta < -UMBRAL) { comando = 'ad'; icono = '🔼'; }  // inclinado lejos de ti
+  } else {
+    // Manda la inclinacion izquierda/derecha
+    if (gamma > UMBRAL)       { comando = 'gh'; icono = '▶️'; }
+    else if (gamma < -UMBRAL) { comando = 'ga'; icono = '◀️'; }
+  }
+
+  dirTexto.textContent = icono;
+
+  // Enviamos el comando (limitando la frecuencia).
+  const ahora = Date.now();
+  if (ahora - ultimoEnvio >= ENVIO_CADA_MS) {
+    enviarComando(comando);
+    ultimoEnvio = ahora;
+  }
+}
+
+// --- ENVIAR UN COMANDO AL ROBOT ---
+async function enviarComando(accion) {
+  if (!caracteristica) return;
+
+  let comando;
+  if (accion === 'stop') {
+    comando = 'stop';
+  } else {
+    comando = accion + ' ' + slider.value;   // ej: "ad 150"
+  }
+
+  // Evita reenviar el mismo comando una y otra vez sin necesidad,
+  // EXCEPTO stop, que conviene repetir para asegurar el frenado.
+  if (comando === ultimoComando && accion !== 'stop') return;
+  ultimoComando = comando;
+
+  try {
+    const datos = new TextEncoder().encode(comando);
+    await caracteristica.writeValue(datos);
+  } catch (error) {
+    // Silencioso: en movimiento continuo no queremos llenar la pantalla de errores.
+  }
+}
+</script>
+
+</body>
+</html>
