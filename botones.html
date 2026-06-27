@@ -3,11 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Control del Robot</title>
+<title>Control por Botones</title>
 <style>
   /* ===================================================================
-     ESTILOS: aqui se define como SE VE la pagina (colores, tamaños).
-     Los niños pueden cambiar facilmente los colores de aqui.
+     CONTROL POR BOTONES en forma de CRUZ, con velocidad independiente
+     para cada direccion.
      =================================================================== */
   body {
     font-family: Arial, Helvetica, sans-serif;
@@ -35,207 +35,201 @@
     border-radius: 12px;
     padding: 14px 24px;
     font-size: 18px;
-    margin-bottom: 16px;
+    margin-bottom: 20px;
     cursor: pointer;
+    width: 100%;
+    max-width: 360px;
   }
   .btn-conectar:active { background: #16a34a; }
 
-  /* Cada control: un boton de direccion con SU PROPIO slider de velocidad */
-  .control {
-    background: #334155;
-    border-radius: 12px;
-    padding: 12px;
-    margin: 0 auto 12px;
-    max-width: 340px;
+  /* La cruz: 3 columnas x 3 filas */
+  .cruz {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, auto);
+    gap: 10px;
+    max-width: 360px;
+    margin: 0 auto;
   }
-  .control button {
+
+  /* Cada celda con boton de direccion contiene el boton + su slider */
+  .celda {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* Boton de direccion */
+  .celda button {
     border: none;
     border-radius: 12px;
-    padding: 16px 0;
-    width: 100%;
-    font-size: 18px;
+    padding: 18px 0;
+    font-size: 17px;
     font-weight: bold;
     color: white;
     background: #3b82f6;
     cursor: pointer;
   }
-  .control button:active { background: #1d4ed8; }
+  .celda button:active { background: #1d4ed8; }
 
-  /* Fila del slider de cada direccion */
-  .fila-vel {
+  /* Slider pequeño debajo de cada boton */
+  .mini-vel {
+    margin-top: 6px;
     display: flex;
     align-items: center;
-    gap: 10px;
-    margin-top: 8px;
+    gap: 6px;
+    font-size: 12px;
   }
-  .fila-vel input { flex: 1; }
-  .fila-vel .num {
-    font-size: 18px;
-    font-weight: bold;
-    color: #fbbf24;
-    width: 38px;
-    text-align: right;
-  }
+  .mini-vel input { flex: 1; min-width: 0; }
+  .mini-vel .num { color: #fbbf24; font-weight: bold; width: 30px; font-size: 13px; }
 
-  /* El boton STOP es rojo, grande y sin slider */
+  /* Celdas vacias de las esquinas de la cruz */
+  .vacio { visibility: hidden; }
+
+  /* Boton STOP en el centro de la cruz (rojo) */
   .btn-stop {
-    background: #ef4444;
-    color: white;
     border: none;
     border-radius: 12px;
-    padding: 20px 0;
-    width: 100%;
-    max-width: 340px;
-    font-size: 20px;
+    background: #ef4444;
+    color: white;
+    font-size: 18px;
     font-weight: bold;
-    margin: 0 auto 16px;
-    display: block;
     cursor: pointer;
+    /* ocupa toda la celda central */
+    align-self: stretch;
   }
   .btn-stop:active { background: #b91c1c; }
 
   #respuesta {
-    margin-top: 8px;
+    margin-top: 20px;
     background: #334155;
     border-radius: 10px;
     padding: 10px;
     font-size: 14px;
     min-height: 20px;
+    max-width: 360px;
+    margin-left: auto;
+    margin-right: auto;
   }
+  .volver { color: #94a3b8; font-size: 14px; display: inline-block; margin-top: 16px; }
 </style>
 </head>
 <body>
 
-  <h1>🤖 Control del Robot</h1>
+  <h1>🎮 Control por Botones</h1>
 
   <div id="estado">Desconectado</div>
 
   <button class="btn-conectar" id="btnConectar">Conectar al Robot</button>
 
-  <!-- ADELANTE: boton + su propio slider de velocidad -->
-  <div class="control">
-    <button onclick="enviarComando('ad', 'velAd')">▲ Adelante</button>
-    <div class="fila-vel">
-      <span>Vel:</span>
-      <input type="range" id="velAd" min="0" max="255" value="150" oninput="actualizarNum('velAd','numAd')">
-      <span class="num" id="numAd">150</span>
-    </div>
-  </div>
+  <!-- CRUZ de control -->
+  <div class="cruz">
 
-  <!-- ATRAS -->
-  <div class="control">
-    <button onclick="enviarComando('at', 'velAt')">▼ Atras</button>
-    <div class="fila-vel">
-      <span>Vel:</span>
-      <input type="range" id="velAt" min="0" max="255" value="150" oninput="actualizarNum('velAt','numAt')">
-      <span class="num" id="numAt">150</span>
+    <!-- Fila 1: [vacio] [ADELANTE] [vacio] -->
+    <div class="vacio"></div>
+    <div class="celda">
+      <button onclick="enviarComando('ad', 'velAd')">▲<br>Adelante</button>
+      <div class="mini-vel">
+        <input type="range" id="velAd" min="0" max="255" value="150"
+               oninput="document.getElementById('numAd').textContent=this.value">
+        <span class="num" id="numAd">150</span>
+      </div>
     </div>
-  </div>
+    <div class="vacio"></div>
 
-  <!-- IZQUIERDA -->
-  <div class="control">
-    <button onclick="enviarComando('ga', 'velGa')">◀ Izquierda</button>
-    <div class="fila-vel">
-      <span>Vel:</span>
-      <input type="range" id="velGa" min="0" max="255" value="150" oninput="actualizarNum('velGa','numGa')">
-      <span class="num" id="numGa">150</span>
+    <!-- Fila 2: [IZQUIERDA] [STOP] [DERECHA] -->
+    <div class="celda">
+      <button onclick="enviarComando('ga', 'velGa')">◀<br>Izquierda</button>
+      <div class="mini-vel">
+        <input type="range" id="velGa" min="0" max="255" value="150"
+               oninput="document.getElementById('numGa').textContent=this.value">
+        <span class="num" id="numGa">150</span>
+      </div>
     </div>
-  </div>
 
-  <!-- DERECHA -->
-  <div class="control">
-    <button onclick="enviarComando('gh', 'velGh')">▶ Derecha</button>
-    <div class="fila-vel">
-      <span>Vel:</span>
-      <input type="range" id="velGh" min="0" max="255" value="150" oninput="actualizarNum('velGh','numGh')">
-      <span class="num" id="numGh">150</span>
+    <button class="btn-stop" onclick="enviarComando('stop', null)">■<br>STOP</button>
+
+    <div class="celda">
+      <button onclick="enviarComando('gh', 'velGh')">▶<br>Derecha</button>
+      <div class="mini-vel">
+        <input type="range" id="velGh" min="0" max="255" value="150"
+               oninput="document.getElementById('numGh').textContent=this.value">
+        <span class="num" id="numGh">150</span>
+      </div>
     </div>
-  </div>
 
-  <!-- STOP: sin slider, detiene el robot -->
-  <button class="btn-stop" onclick="enviarComando('stop', null)">■ STOP</button>
+    <!-- Fila 3: [vacio] [ATRAS] [vacio] -->
+    <div class="vacio"></div>
+    <div class="celda">
+      <button onclick="enviarComando('at', 'velAt')">▼<br>Atras</button>
+      <div class="mini-vel">
+        <input type="range" id="velAt" min="0" max="255" value="150"
+               oninput="document.getElementById('numAt').textContent=this.value">
+        <span class="num" id="numAt">150</span>
+      </div>
+    </div>
+    <div class="vacio"></div>
+
+  </div>
 
   <div id="respuesta">Respuestas del robot apareceran aqui...</div>
 
+  <br>
+  <a class="volver" href="index.html">← Volver al menú</a>
+
 <script>
 /* =====================================================================
-   LOGICA: el "cerebro" de la pagina. Maneja Bluetooth y los comandos.
+   LOGICA: Bluetooth y envio de comandos.
    ===================================================================== */
-
-// "Direcciones" del robot. Deben coincidir con las de la ESP32 (FFE0/FFE1).
 const SERVICE_UUID = 0xFFE0;
 const CHAR_UUID    = 0xFFE1;
 
 let caracteristica = null;
-
 const estado    = document.getElementById('estado');
 const respuesta = document.getElementById('respuesta');
-
-// Actualiza el numero que se muestra junto a cada slider.
-function actualizarNum(idSlider, idNumero) {
-  document.getElementById(idNumero).textContent =
-    document.getElementById(idSlider).value;
-}
 
 // --- CONECTAR AL ROBOT ---
 document.getElementById('btnConectar').addEventListener('click', async () => {
   try {
     estado.textContent = 'Buscando robot...';
-
-    // FILTRO INTERMEDIO: solo muestra dispositivos cuyo nombre empiece
-    // por "ROBOT". Asi no aparece el mar de dispositivos ajenos, pero
-    // tampoco dependemos de que el servicio venga en el advertising.
-    // 'optionalServices' da permiso para usar FFE0 tras conectar.
     const dispositivo = await navigator.bluetooth.requestDevice({
       filters: [{ namePrefix: 'ROBOT' }],
       optionalServices: [SERVICE_UUID]
     });
-
     dispositivo.addEventListener('gattserverdisconnected', () => {
       estado.textContent = 'Desconectado';
       caracteristica = null;
     });
-
     estado.textContent = 'Conectando...';
     const servidor = await dispositivo.gatt.connect();
-
     const servicio = await servidor.getPrimaryService(SERVICE_UUID);
     caracteristica = await servicio.getCharacteristic(CHAR_UUID);
-
-    // Nos suscribimos para recibir mensajes del robot.
     await caracteristica.startNotifications();
     caracteristica.addEventListener('characteristicvaluechanged', (evento) => {
-      const texto = new TextDecoder().decode(evento.target.value);
-      respuesta.textContent = '🤖 ' + texto;
+      respuesta.textContent = '🤖 ' + new TextDecoder().decode(evento.target.value);
     });
-
     estado.textContent = '✅ Conectado a ' + dispositivo.name;
-
   } catch (error) {
     estado.textContent = 'Error: ' + error.message;
   }
 });
 
 // --- ENVIAR UN COMANDO ---
-// accion: 'ad','at','ga','gh','stop'.  idSlider: el slider de velocidad
-// de esa direccion (o null para stop).
+// accion: 'ad','at','ga','gh','stop'. idSlider: el slider de esa direccion (o null).
 async function enviarComando(accion, idSlider) {
   if (!caracteristica) {
     estado.textContent = '⚠️ Primero conecta al robot';
     return;
   }
-
   let comando;
   if (accion === 'stop') {
-    comando = 'stop';                                   // stop no lleva numero
+    comando = 'stop';
   } else {
     const velocidad = document.getElementById(idSlider).value;
-    comando = accion + ' ' + velocidad;                // ej: "ad 150"
+    comando = accion + ' ' + velocidad;
   }
-
   try {
-    const datos = new TextEncoder().encode(comando);
-    await caracteristica.writeValue(datos);
+    await caracteristica.writeValue(new TextEncoder().encode(comando));
     respuesta.textContent = 'Enviado: ' + comando;
   } catch (error) {
     estado.textContent = 'Error al enviar: ' + error.message;
