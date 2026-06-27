@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Robot - Menú Principal</title>
+<style>
+  /* ===================================================================
+     MENU PRINCIPAL del robot. Desde aqui se elige como controlarlo.
+     Los niños pueden cambiar colores y textos facilmente aqui abajo.
+     =================================================================== */
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    background: #1e293b;
+    color: #f1f5f9;
+    text-align: center;
+    margin: 0;
+    padding: 24px 16px;
+    user-select: none;
+    min-height: 100vh;
+    box-sizing: border-box;
+  }
+
+  h1 {
+    font-size: 26px;
+    margin: 12px 0 6px;
+  }
+
+  .subtitulo {
+    color: #94a3b8;
+    font-size: 15px;
+    margin-bottom: 32px;
+  }
+
+  /* Cada opcion del menu es una tarjeta grande y tocable */
+  .opcion {
+    display: block;
+    text-decoration: none;     /* quita el subrayado de los enlaces */
+    color: white;
+    border-radius: 16px;
+    padding: 28px 20px;
+    margin: 0 auto 18px;
+    max-width: 360px;
+    font-size: 20px;
+    font-weight: bold;
+    cursor: pointer;
+  }
+  .opcion:active { opacity: 0.8; }
+
+  /* El emoji/icono grande de cada tarjeta */
+  .opcion .icono {
+    font-size: 44px;
+    display: block;
+    margin-bottom: 10px;
+  }
+
+  /* Texto pequeño descriptivo dentro de la tarjeta */
+  .opcion .desc {
+    display: block;
+    font-size: 14px;
+    font-weight: normal;
+    margin-top: 8px;
+    opacity: 0.9;
+  }
+
+  /* Colores de cada tarjeta (cambialos a tu gusto) */
+  .botones      { background: #3b82f6; }   /* azul  */
+  .acelerometro { background: #8b5cf6; }   /* morado */
+
+  .pie {
+    margin-top: 30px;
+    color: #64748b;
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+
+  <h1>🤖 Mi Robot</h1>
+  <p class="subtitulo">Elige cómo quieres controlarlo</p>
+
+  <!-- OPCION 1: control por botones -->
+  <a class="opcion botones" href="botones.html">
+    <span class="icono">🎮</span>
+    Control por Botones
+    <span class="desc">Toca los botones para mover el robot</span>
+  </a>
+
+  <!-- OPCION 2: control por acelerometro -->
+  <a class="opcion acelerometro" href="acelerometro.html">
+    <span class="icono">📱</span>
+    Control por Inclinación
+    <span class="desc">Inclina el celular para mover el robot</span>
+  </a>
+
+  <p class="pie">Universidad de los Andes</p>
+
+</body>
+</html>
