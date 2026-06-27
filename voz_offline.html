@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Control por Voz (Offline)</title>
+
+<!-- Librerias de TensorFlow.js y el modelo de comandos de voz.
+     Se descargan la primera vez y quedan en cache del navegador.
+     El reconocimiento luego ocurre DENTRO del telefono (no manda tu voz a internet). -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/speech-commands"></script>
+
+<style>
+  /* ===================================================================
+     CONTROL POR VOZ OFFLINE: reconoce palabras en INGLES dentro del
+     telefono usando inteligencia artificial (TensorFlow.js).
+     Palabras: up, down, left, right, stop.
+     =================================================================== */
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    background: #1e293b;
+    color: #f1f5f9;
+    text-align: center;
+    margin: 0;
+    padding: 16px;
+    user-select: none;
+  }
+  h1 { font-size: 22px; margin: 8px 0 16px; }
+
+  #estado {
+    background: #334155;
+    border-radius: 10px;
+    padding: 10px;
+    margin-bottom: 12px;
+    font-size: 15px;
+  }
+
+  .btn {
+    border: none;
+    border-radius: 12px;
+    padding: 14px 24px;
+    font-size: 18px;
+    color: white;
+    cursor: pointer;
+    margin-bottom: 12px;
+    width: 100%;
+    max-width: 360px;
+  }
+  .btn-conectar { background: #22c55e; }
+  .btn-conectar:active { background: #16a34a; }
+  .btn-escuchar { background: #3b82f6; }
+  .btn-escuchar:active { background: #1d4ed8; }
+  .btn-escuchar.escuchando { background: #ef4444; }
+  .btn:disabled { background: #475569; cursor: not-allowed; }
+
+  .panel {
+    background: #334155;
+    border-radius: 12px;
+    padding: 14px;
+    margin: 0 auto 12px;
+    max-width: 360px;
+  }
+  .fila-vel { display: flex; align-items: center; gap: 10px; }
+  .fila-vel input { flex: 1; }
+  #numVel { font-size: 20px; font-weight: bold; color: #fbbf24; width: 40px; }
+
+  #comandoActual {
+    font-size: 30px;
+    font-weight: bold;
+    margin: 14px 0;
+    min-height: 40px;
+    color: #fbbf24;
+  }
+  #escuchado { color: #94a3b8; font-size: 14px; margin-bottom: 12px; min-height: 18px; }
+
+  .ayuda {
+    background: #334155;
+    border-radius: 10px;
+    padding: 12px;
+    margin: 0 auto 12px;
+    max-width: 360px;
+    font-size: 14px;
+    color: #cbd5e1;
+    line-height: 1.9;
+  }
+
+  #respuesta {
+    background: #334155;
+    border-radius: 10px;
+    padding: 10px;
+    font-size: 14px;
+    min-height: 20px;
+    max-width: 360px;
+    margin: 0 auto;
+  }
+  .volver { color: #94a3b8; font-size: 14px; display: inline-block; margin-top: 16px; }
+</style>
+</head>
+<body>
+
+  <h1>🎤 Control por Voz (Offline)</h1>
+
+  <div id="estado">Desconectado</div>
+
+  <!-- 1) Conectar al robot -->
+  <button class="btn btn-conectar" id="btnConectar">Conectar al Robot</button>
+
+  <!-- 2) Activar el microfono (carga el modelo la primera vez) -->
+  <button class="btn btn-escuchar" id="btnEscuchar" disabled>Cargando IA...</button>
+
+  <!-- Velocidad -->
+  <div class="panel">
+    <div class="fila-vel">
+      <span>Velocidad:</span>
+      <input type="range" id="sliderVel" min="0" max="255" value="150"
+             oninput="document.getElementById('numVel').textContent = this.value">
+      <span id="numVel">150</span>
+    </div>
+  </div>
+
+  <div id="comandoActual">⏸️</div>
+  <div id="escuchado">Carga la IA y di una palabra en ingles</div>
+
+  <!-- Ayuda: las palabras en INGLES -->
+  <div class="ayuda">
+    <b>Di estas palabras en INGLÉS:</b><br>
+    🔼 "up" (adelante) &nbsp; 🔽 "down" (atras)<br>
+    ◀️ "left" (izquierda) &nbsp; ▶️ "right" (derecha)<br>
+    ■ "stop" (parar)
+  </div>
+
+  <div id="respuesta">Respuestas del robot apareceran aqui...</div>
+
+  <br>
+  <a class="volver" href="index.html">← Volver al menú</a>
+
+<script>
+/* =====================================================================
+   LOGICA: Bluetooth + reconocimiento de voz offline con TensorFlow.js
+   ===================================================================== */
+
+const SERVICE_UUID = 0xFFE0;
+const CHAR_UUID    = 0xFFE1;
+
+let caracteristica = null;
+let recognizer = null;     // el modelo de IA de voz
+let escuchando = false;
+
+const estado       = document.getElementById('estado');
+const respuesta    = document.getElementById('respuesta');
+const slider       = document.getElementById('sliderVel');
+const comandoActual= document.getElementById('comandoActual');
+const escuchado    = document.getElementById('escuchado');
+const btnEscuchar  = document.getElementById('btnEscuchar');
+
+// ----------------------------------------------------------------------
+// TABLA: cada PALABRA en ingles del modelo -> accion del robot + icono.
+// El modelo reconoce palabras fijas en ingles; aqui las traducimos.
+// ----------------------------------------------------------------------
+const MAPA = {
+  'up':    { accion: 'ad',   icono: '🔼', nombre: 'adelante' },
+  'down':  { accion: 'at',   icono: '🔽', nombre: 'atras' },
+  'left':  { accion: 'ga',   icono: '◀️', nombre: 'izquierda' },
+  'right': { accion: 'gh',   icono: '▶️', nombre: 'derecha' },
+  'stop':  { accion: 'stop', icono: '■',  nombre: 'parar' }
+};
+
+// Que tan seguro debe estar el modelo para hacer caso (0 a 1).
+// Mas alto = menos errores pero hay que pronunciar mas claro.
+const CONFIANZA_MINIMA = 0.75;
+
+// --- CARGAR EL MODELO DE IA (al abrir la pagina) ---
+async function cargarModelo() {
+  try {
+    estado.textContent = 'Descargando modelo de IA (primera vez)...';
+    recognizer = speechCommands.create('BROWSER_FFT');  // usa el microfono del navegador
+    await recognizer.ensureModelLoaded();
+    estado.textContent = 'Modelo listo. Conecta al robot.';
+    btnEscuchar.disabled = false;
+    btnEscuchar.textContent = '🎤 Empezar a Escuchar';
+  } catch (e) {
+    estado.textContent = 'Error cargando IA: ' + e.message + ' (¿hay internet la primera vez?)';
+  }
+}
+cargarModelo();
+
+// --- CONECTAR AL ROBOT ---
+document.getElementById('btnConectar').addEventListener('click', async () => {
+  try {
+    estado.textContent = 'Buscando robot...';
+    const dispositivo = await navigator.bluetooth.requestDevice({
+      filters: [{ namePrefix: 'ROBOT' }],
+      optionalServices: [SERVICE_UUID]
+    });
+    dispositivo.addEventListener('gattserverdisconnected', () => {
+      estado.textContent = 'Desconectado';
+      caracteristica = null;
+    });
+    estado.textContent = 'Conectando...';
+    const servidor = await dispositivo.gatt.connect();
+    const servicio = await servidor.getPrimaryService(SERVICE_UUID);
+    caracteristica = await servicio.getCharacteristic(CHAR_UUID);
+    await caracteristica.startNotifications();
+    caracteristica.addEventListener('characteristicvaluechanged', (evento) => {
+      respuesta.textContent = '🤖 ' + new TextDecoder().decode(evento.target.value);
+    });
+    estado.textContent = '✅ Conectado a ' + dispositivo.name;
+  } catch (error) {
+    estado.textContent = 'Error: ' + error.message;
+  }
+});
+
+// --- BOTON ESCUCHAR (activar/desactivar reconocimiento) ---
+btnEscuchar.addEventListener('click', () => {
+  if (!caracteristica) { estado.textContent = '⚠️ Primero conecta al robot'; return; }
+  if (!recognizer)     { estado.textContent = '⚠️ El modelo aun no esta listo'; return; }
+
+  if (!escuchando) {
+    escuchando = true;
+    btnEscuchar.textContent = '🛑 Dejar de Escuchar';
+    btnEscuchar.classList.add('escuchando');
+
+    // Empezar a escuchar. El callback se llama cada vez que detecta una palabra.
+    recognizer.listen(resultado => {
+      const palabras = recognizer.wordLabels();     // lista de palabras del modelo
+      const puntajes = resultado.scores;            // probabilidad de cada palabra
+
+      // Buscar la palabra con mayor puntaje.
+      let mejor = 0;
+      for (let i = 1; i < puntajes.length; i++) {
+        if (puntajes[i] > puntajes[mejor]) mejor = i;
+      }
+      const palabra = palabras[mejor];
+
+      // Si esa palabra esta en nuestro mapa, ejecutamos su comando.
+      if (MAPA[palabra]) {
+        const item = MAPA[palabra];
+        escuchado.textContent = 'Escuche: "' + palabra + '" (' + item.nombre + ')';
+        comandoActual.textContent = item.icono + ' ' + item.nombre;
+        enviarComando(item.accion);
+      }
+    }, {
+      probabilityThreshold: CONFIANZA_MINIMA,  // solo hacer caso si esta seguro
+      overlapFactor: 0.5                        // cada cuanto analiza el audio
+    });
+
+  } else {
+    escuchando = false;
+    btnEscuchar.textContent = '🎤 Empezar a Escuchar';
+    btnEscuchar.classList.remove('escuchando');
+    if (recognizer) recognizer.stopListening();
+    enviarComando('stop');   // seguridad: al dejar de escuchar, el robot para
+  }
+});
+
+// --- ENVIAR UN COMANDO AL ROBOT ---
+async function enviarComando(accion) {
+  if (!caracteristica) return;
+  let comando = (accion === 'stop') ? 'stop' : (accion + ' ' + slider.value);
+  try {
+    await caracteristica.writeValue(new TextEncoder().encode(comando));
+    respuesta.textContent = 'Enviado: ' + comando;
+  } catch (error) {
+    estado.textContent = 'Error al enviar: ' + error.message;
+  }
+}
+</script>
+
+</body>
+</html>
